@@ -10,6 +10,7 @@ import time
 import urllib.request
 
 from pymongo import MongoClient
+from pymongo.errors import OperationFailure
 
 ip = urllib.request.urlopen("https://api.ipify.org", timeout=15).read().decode().strip()
 wait_min = float(os.getenv("ATLAS_WAIT_MINUTES", "20"))
@@ -24,6 +25,9 @@ while time.time() < deadline:
         MongoClient(os.environ["MONGODB_URI"], serverSelectionTimeoutMS=8000).admin.command("ping")
         print(f"Atlas accepted {ip}. Continuing.", flush=True)
         sys.exit(0)
+    except OperationFailure as e:
+        sys.exit(f"Atlas reached, but it rejected the login ({e.details.get('errmsg') if e.details else e}). "
+                 "Fix the username/password in the MONGODB_URI secret.")
     except Exception as e:
         print(f"  not yet ({type(e).__name__}); still waiting for {ip} to be allowed...", flush=True)
         time.sleep(10)
