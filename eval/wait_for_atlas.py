@@ -20,12 +20,19 @@ print(f"waiting up to {wait_min:g} minutes for Atlas to accept connections...")
 print("=" * 70, flush=True)
 
 deadline = time.time() + wait_min * 60
+auth_deadline = None      # Atlas takes a minute or two to apply a changed database-user password
 while time.time() < deadline:
     try:
         MongoClient(os.environ["MONGODB_URI"], serverSelectionTimeoutMS=8000).admin.command("ping")
         print(f"Atlas accepted {ip}. Continuing.", flush=True)
         sys.exit(0)
     except OperationFailure as e:
+        auth_deadline = auth_deadline or time.time() + 180
+        if time.time() < auth_deadline:
+            print("  Atlas reached; login rejected, retrying (a changed password takes a minute to apply)...",
+                  flush=True)
+            time.sleep(15)
+            continue
         sys.exit(f"Atlas reached, but it rejected the login ({e.details.get('errmsg') if e.details else e}). "
                  "Fix the username/password in the MONGODB_URI secret.")
     except Exception as e:
