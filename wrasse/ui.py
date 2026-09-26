@@ -96,6 +96,47 @@ class UI:
     def progress(self, text: str) -> None:
         self.console.print(Text(text, style="bold green"))
 
+    def back_to_plan(self, text: str) -> None:
+        self.console.print(Text(f"↩ {text}", style="bold blue"))
+
+    def detour_card(self, v: dict, link: str | None = None) -> None:
+        imp, opts = v["impact"], v["options"]
+        pushes = ", ".join(s.upper() for s in imp["delays_steps"]) or "nothing"
+        t = Text()
+        t.append("Asked: ", style="bold")
+        t.append(f"{v['restatement']}\n")
+        rel = v["related_to_goal"]
+        t.append("Related to goal: ", style="bold")
+        t.append(rel.capitalize(), style={"yes": "green", "partly": "yellow", "no": "red"}.get(rel, ""))
+        t.append(f", {v['related_reason']}\n" if v["related_reason"] else "\n")
+        if link:
+            t.append(f"Linked: {link}\n", style="magenta")
+        t.append("Impact: ", style="bold")
+        t.append(f"pushes {pushes} ~{imp['est_min']}m · touches ~{len(imp['files_likely'])} files · "
+                 f"risk: {imp['risk']}\n\n")
+        for key in ("now", "later", "skip"):
+            t.append(f"{key.capitalize() + ':':<7}", style="bold")
+            t.append(f"+ {opts[key]['pro']}", style="green")
+            t.append("  ")
+            t.append(f"− {opts[key]['con']}\n", style="red")
+        t.append("\nRecommendation: ", style="bold")
+        t.append(v["recommendation"].upper(), style="bold reverse")
+        t.append(f", {v['recommendation_reason']}")
+        if v.get("rule_applied"):
+            t.append(f"  [rule applied: \"{v['rule_applied']}\"]", style="cyan")
+        t.append("\n\nReply: now / later / skip", style="italic")
+        self.console.print(Panel(t, title="🐟 WRASSE: DETOUR CHECK", border_style="magenta", title_align="left"))
+
+    def scope_card(self, path: str, step: dict | None) -> bool:
+        label = f"Step {step['id'].upper()}'s scope ({step['size']})" if step else "the plan's scope"
+        scope = ", ".join((step or {}).get("files_scope") or [])
+        body = Text()
+        body.append(f"{path}", style="bold")
+        body.append(f" is outside {label}.\n")
+        body.append(f"In scope: {scope}", style="dim")
+        self.console.print(Panel(body, title="🐟 WRASSE: SCOPE CHECK", border_style="red", title_align="left"))
+        return self.ask("Expand scope? y/n › ").strip().lower() in ("y", "yes")
+
 
 STATUS = {"todo": ("○", "white"), "doing": ("◉", "bold yellow"), "done": ("✔", "green"),
           "parked": ("⏸", "dim")}
@@ -120,3 +161,11 @@ class NullUI(UI):
     def gap_card(self, basics, gap, mins_left, budget): self.lines.append(f"GAP {gap}")
     def plan_card(self, draft, budget, title="", diff=None): self.lines.append(f"PLAN {draft['steps']}")
     def progress(self, text): self.lines.append("PROGRESS " + text)
+    def back_to_plan(self, text): self.lines.append("BACK " + text)
+    def detour_card(self, v, link=None): self.lines.append(f"DETOUR {v['restatement']} → {v['recommendation']}")
+
+    def scope_card(self, path, step):
+        self.lines.append(f"SCOPE {path}")
+        return self.scope_answer == "y"
+
+    scope_answer = "n"     # the eval auto-answers scope cards with n

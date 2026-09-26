@@ -107,10 +107,14 @@ def test_mark_step_done_advances_and_stops_turn(fake_llm, workspaces):
     db.save_plan(planner.new_plan("demo", {"goal": "g", "done_definition": "d"}, d, REF.replace(hour=16).isoformat()))
     db.set_state("demo", phase="building")
     ui = NullUI()
-    fake_llm.queue = [response(tool_block("mark_step_done", {"summary": "added category"}))]
+    fake_llm.queue = [response(tool_block("mark_step_done", {"summary": "x"}, "a")),
+                      response(tool_block("run_tests", {}, "b")),
+                      response(tool_block("mark_step_done", {"summary": "added category"}, "c"))]
     Session("demo", ui).handle("go")
+    first = fake_llm.requests[1]["messages"][-1]["content"][0]
+    assert first["is_error"] and "run_tests" in first["content"]     # guard: tests before done
     plan = db.get_plan("demo")
     assert plan["current_step_id"] == "s2" and plan["steps"][0]["status"] == "done"
-    assert len(fake_llm.requests) == 1          # turn stopped after the step advanced
+    assert len(fake_llm.requests) == 3          # turn stopped after the step advanced
     assert any("Step 1 'Add category field' done · 1/2" in l for l in ui.lines)
     assert "CURRENT STEP S2 (2/2)" in build_context(plan)

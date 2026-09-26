@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 BUFFER = 0.20   # plans fit time left minus a 20% buffer
 
@@ -93,3 +93,12 @@ def clock_line(plan: dict | None, ref: datetime | None = None) -> str:
     elif plan and plan.get("steps") and all(s["status"] in ("done", "parked") for s in plan["steps"]):
         parts.append("all steps done")
     return " · ".join(parts)
+
+
+def fmt_ts(ts) -> str:
+    """Mongo timestamp (naive UTC) → local HH:MM."""
+    if isinstance(ts, str):
+        ts = datetime.fromisoformat(ts)
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return ts.astimezone(now().tzinfo).strftime("%H:%M")

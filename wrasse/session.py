@@ -5,7 +5,8 @@ import os
 import shutil
 from pathlib import Path
 
-from . import clock, db, executor, planner
+from . import clock, db, executor, planner, triage
+from .guard import Guard, in_scope
 from .tools import ToolBox
 from .ui import UI
 
@@ -13,6 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_DIR = REPO_ROOT / "workspace_template"
 HISTORY_TURNS = 20
 YES = {"y", "yes", "ok", "okay", "confirm", "looks good", "lgtm", "go"}
+NO = {"n", "no", "cancel", "nevermind", "never mind"}
 
 
 def workspaces_dir() -> Path:
@@ -30,6 +32,18 @@ def create_project(project: str, mode: str = "wrasse", template: Path = TEMPLATE
     shutil.copytree(template, ws, ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"))
     db.set_state(project, mode=mode, phase="gap_check", detour_pending=None)
     return ws
+
+
+def install_plan(project: str, goal: str, done_definition: str, deadline_iso: str, steps: list[dict]) -> dict:
+    """Install a predefined plan and skip the gap check (used by the eval)."""
+    draft = planner.normalize_draft({"steps": steps, "cut": [], "assumptions": []})
+    for given, s in zip(steps, draft["steps"]):
+        s["id"] = given.get("id", s["id"])
+    plan = planner.new_plan(project, {"goal": goal, "done_definition": done_definition}, draft, deadline_iso)
+    plan["history"][0]["reason"] = "predefined plan"
+    db.save_plan(plan)
+    db.set_state(project, phase="building", gap=None, detour_pending=None, plan_change_pending=None)
+    return plan
 
 
 def build_context(plan: dict, ref=None) -> str:
@@ -61,7 +75,12 @@ class Session:
             db.set_state(project, mode=mode)
         self.workspace = workspace_path(project)
         self.box = ToolBox(self.workspace, on_step_done=self._step_done)
+        if self.mode == "wrasse":
+            self.box.guard = Guard(project, ask_scope=self.ui.scope_card, on_scope_decision=self._reflect)
+        else:
+            self.box.on_write = self._log_naive_edit
         self._step_advanced = False
+        self._history: list[dict] = []
 
     # ---- helpers ----
     def history(self) -> list[dict]:
@@ -69,9 +88,13 @@ class Session:
                 if m["role"] in ("user", "assistant") and m.get("phase") != "gap_check"]
         return msgs[-HISTORY_TURNS:]
 
-    def say(self, text: str) -> None:
-        """Harness (not agent) output, logged so a resumed session has the record."""
-        db.add_message(self.project, "wrasse", text)
+    def say(self, text: str, to_agent: bool = False) -> None:
+        """Harness (not agent) output, logged so a resumed session has the record.
+        to_agent=True also puts it in the executor's history, so it knows a detour was handled."""
+        if to_agent:
+            db.add_message(self.project, "assistant", f"[wrasse] {text}", kind="wrasse")
+        else:
+            db.add_message(self.project, "wrasse", text)
 
     def plan(self) -> dict | None:
         return db.get_plan(self.project)
@@ -94,21 +117,29 @@ class Session:
     def handle(self, message: str) -> executor.ExecResult | None:
         message = message.strip()
         state = db.get_state(self.project)
-        if self.mode == "naive":
-            return self._naive(message)
-        if state.get("phase") == "gap_check":
+        if state.get("phase") == "gap_check" and self.mode == "wrasse":
             db.add_message(self.project, "user", message, phase="gap_check")
             return self._gap_check(message, state.get("gap") or {})
+        self._history = self.history()
+        db.add_message(self.project, "user", message)
+        if self.mode == "naive":
+            return self._naive(message)
         plan = self.plan()
         if plan is None:
             db.set_state(self.project, phase="gap_check", gap={})
             return self._gap_check(message, {})
         self.show_rail(plan)
-        return self._work(message, plan)
+        if state.get("plan_change_pending"):
+            return self._plan_change_reply(message, state["plan_change_pending"], plan)
+        return self._triage(message, state, plan)
 
     def _naive(self, message: str) -> executor.ExecResult:
-        """Baseline: every message straight to the executor, full tools, no plan/clock context."""
+        """Baseline: every message straight to the executor, full tools, no triage/guard/plan/clock."""
         return self._run(message or "go", context="")
+
+    def _log_naive_edit(self, path: str) -> None:
+        _, step = clock.current_step(self.plan())
+        db.log_edit(self.project, path, step["id"] if step else None, in_scope(step, path), allowed=True)
 
     # ---- phase: gap_check ----
     def _gap_check(self, message: str, gap_state: dict) -> executor.ExecResult | None:
@@ -193,27 +224,184 @@ class Session:
         return self._work("", plan)
 
     # ---- phase: building ----
+    def _triage(self, message: str, state: dict, plan: dict) -> executor.ExecResult | None:
+        pending = state.get("detour_pending")
+        v = triage.classify(message, plan, rules=db.active_rules(self.project),
+                            parked=db.get_parked(self.project), pending=pending)
+        if v.get("fallback"):
+            self.ui.warn(f"{v['fallback']} → treating as on-plan")
+        kind = v["kind"]
+
+        if kind == "decision":
+            if v.get("decision") in triage.DECISIONS:
+                return self._decide(v["decision"], pending, plan)
+            self._remind_pending(pending)
+            return None
+
+        event_id = db.log_event(self.project, prompt=message, kind=kind, verdict=v) if message else None
+
+        if pending:
+            # a detour is waiting: answer pure questions, otherwise hold the line until now/later/skip
+            if kind == "question" and not v["implies_change"]:
+                result = self._run(message, context=build_context(plan), read_only=True)
+            else:
+                result = None
+            self._remind_pending(pending)
+            return result
+
+        if kind == "on_plan":
+            return self._work(message, plan)
+
+        if kind == "question" and not v["implies_change"]:
+            result = self._run(message, context=build_context(plan), read_only=True)
+            self.ui.back_to_plan(f"Plan unaffected, continuing {self._step_label(plan)}.")
+            return result
+
+        if kind == "plan_change":
+            return self._propose_plan_change(message, plan, event_id)
+
+        # new_request, or a question that implies a change: answer the question part, then price the detour
+        result = None
+        if kind == "question":
+            result = self._run(message, context=build_context(plan), read_only=True)
+        self.ui.detour_card(v, link=self._link(v, plan))
+        db.set_state(self.project, detour_pending={"event_id": event_id, "prompt": message, "verdict": v})
+        self.say(f"Detour check: '{v['restatement']}' is not part of the current step. Waiting for the user to "
+                 f"decide now / later / skip (recommended: {v['recommendation']}). Do not start it.", to_agent=True)
+        return result
+
+    def _step_label(self, plan: dict) -> str:
+        i, step = clock.current_step(plan)
+        return f"Step {i + 1} '{step['title']}'" if step else "the plan (all steps done)"
+
+    def _link(self, v: dict, plan: dict) -> str | None:
+        if v.get("related_parked_id"):
+            for p in db.get_parked(self.project):
+                if str(p["_id"]) == str(v["related_parked_id"]):
+                    return f"you parked this at {clock.fmt_ts(p['ts'])} (\"{p.get('summary') or p['text']}\")"
+        if v.get("related_step_id"):
+            for i, s in enumerate(plan["steps"]):
+                if s["id"] == v["related_step_id"]:
+                    return f"this belongs to Step {i + 1} '{s['title']}' [{s['status']}]"
+        return None
+
+    def _remind_pending(self, pending: dict) -> None:
+        self.ui.detour_card(pending["verdict"])
+        self.ui.info("A detour is pending. Reply now / later / skip to get back to the plan.")
+
+    def _decide(self, decision: str, pending: dict, plan: dict) -> executor.ExecResult | None:
+        v = pending["verdict"]
+        if pending.get("event_id") is not None:
+            db.update_event(pending["event_id"], user_decision=decision, decision_ts=db.now())
+        if decision == "now":
+            step = self._insert_step(plan, v)
+            self.ui.progress(f"+ Added {step['id'].upper()} '{step['title']}' after the current step "
+                             f"(plan v{plan['version']}).")
+        elif decision == "later":
+            _, cur = clock.current_step(plan)
+            db.add_parked(self.project, text=pending["prompt"], category=v.get("category"),
+                          related_step_id=v.get("related_step_id") or (cur["id"] if cur else None),
+                          summary=v.get("restatement"))
+            self.ui.progress(f"⏸ Parked: {v.get('restatement')}")
+        else:
+            self.ui.progress(f"✗ Skipped: {v.get('restatement')}")
+        db.set_state(self.project, detour_pending=None)
+        outcome = {"now": "added to the plan as a new step after the current one",
+                   "later": "parked for later; do not work on it now", "skip": "skipped; do not work on it"}[decision]
+        self.say(f"Detour '{v.get('restatement')}' {outcome}. Back to the plan.", to_agent=True)
+        self._reflect(pending.get("event_id"))
+        return self._resume()
+
+    def _insert_step(self, plan: dict, v: dict) -> dict:
+        i, _ = clock.current_step(plan)
+        used = {s["id"] for s in plan["steps"]}
+        n = len(used) + 1
+        while f"s{n}" in used:
+            n += 1
+        est = int(v["impact"].get("est_min") or 15)
+        step = {"id": f"s{n}", "title": v["restatement"], "why": v.get("related_reason", ""),
+                "size": "cupcake" if est <= 30 else "layer", "est_min": est,
+                "files_scope": list(v["impact"].get("files_likely") or []), "status": "todo"}
+        pos = (i + 1) if i is not None else len(plan["steps"])
+        plan["steps"].insert(pos, step)
+        if plan.get("current_step_id") is None:
+            step["status"], plan["current_step_id"] = "doing", step["id"]
+        plan["version"] = plan.get("version", 1) + 1
+        plan.setdefault("history", []).append({"version": plan["version"], "ts": clock.now().isoformat(),
+                                               "change": f"added {step['id']} '{step['title']}'",
+                                               "reason": "detour approved: now"})
+        db.save_plan(plan)
+        return step
+
+    def _resume(self) -> executor.ExecResult | None:
+        """Return-to-plan guarantee: after any detour decision, the executor resumes the current step."""
+        plan = self.plan()
+        i, step = clock.current_step(plan)
+        if step is None:
+            self.ui.back_to_plan("Back to plan → all steps done.")
+            return None
+        self.ui.back_to_plan(f"Back to plan → Step {i + 1} '{step['title']}'")
+        self._history = self.history()
+        return self._run(f"Continue Step {i + 1}: {step['title']}.", context=build_context(plan))
+
+    def _reflect(self, event_id=None) -> None:
+        """Rule learning hook (build step 4)."""
+
+    # ---- plan_change ----
+    def _propose_plan_change(self, instruction: str, plan: dict, event_id) -> None:
+        basics = {"goal": plan["goal"], "done_definition": plan["done_definition"]}
+        mins = clock.minutes_left(plan) or 0
+        try:
+            draft = planner.make_plan(basics, self.workspace, mins, previous=plan, instruction=instruction)
+        except Exception as e:
+            self.ui.warn(f"planner failed ({e}); plan unchanged.")
+            return None
+        self.ui.plan_card(draft, clock.budget_minutes(mins), title="🐟 WRASSE: PLAN CHANGE",
+                          diff=planner.plan_diff(plan, draft["steps"]))
+        db.set_state(self.project, plan_change_pending={"draft": draft, "instruction": instruction,
+                                                        "event_id": event_id})
+        return None
+
+    def _plan_change_reply(self, message: str, pending: dict, plan: dict) -> executor.ExecResult | None:
+        low = message.lower()
+        if low in YES:
+            new = planner.apply_revision(plan, pending["draft"], reason=pending["instruction"])
+            db.save_plan(new)
+            db.set_state(self.project, plan_change_pending=None)
+            if pending.get("event_id") is not None:
+                db.update_event(pending["event_id"], user_decision="y", decision_ts=db.now())
+            self.ui.progress(f"Plan v{new['version']} saved: {new['history'][-1]['change']}")
+            return self._resume()
+        if low in NO:
+            db.set_state(self.project, plan_change_pending=None)
+            if pending.get("event_id") is not None:
+                db.update_event(pending["event_id"], user_decision="n", decision_ts=db.now())
+            self.ui.info("Plan change discarded.")
+            return self._resume()
+        db.set_state(self.project, plan_change_pending=None)
+        return self._propose_plan_change(f"{pending['instruction']}; then: {message}", plan,
+                                         pending.get("event_id"))
+
     def _work(self, message: str, plan: dict) -> executor.ExecResult | None:
-        """Executor works the current step (step 3 puts triage in front of this)."""
+        """Executor works the current step."""
         i, step = clock.current_step(plan)
         if step is None:
             self.ui.progress("All steps done. 🎉")
-            if not message:
+            if not message or message.lower() in triage.CONTINUE_WORDS:
                 return None
-        if not message or message.lower() == "go":
-            message = f"Continue Step {i + 1}: {step['title']}." if step else "go"
+        if not message or message.lower() in triage.CONTINUE_WORDS:
+            message = f"Continue Step {i + 1}: {step['title']}."
         return self._run(message, context=build_context(plan))
 
     def _run(self, message: str, context: str, read_only: bool = False) -> executor.ExecResult:
-        history = self.history()
-        db.add_message(self.project, "user", message)
         self._step_advanced = False
-        result = executor.run(message, self.box, context=context, history=history, read_only=read_only,
+        result = executor.run(message, self.box, context=context, history=self._history, read_only=read_only,
                               on_tool=self.ui.tool, should_stop=lambda: self._step_advanced)
         self.ui.agent(result.text)
         if result.stop not in ("end_turn", "interrupted"):
             self.ui.warn(f"agent stopped: {result.stop}")
         db.add_message(self.project, "assistant", result.text or f"({result.stop})")
+        self._history = self.history()
         return result
 
     def _step_done(self, summary: str) -> str:
