@@ -35,3 +35,12 @@ def test_clock_line():
 def test_budget():
     assert clock.budget_minutes(100) == 80
     assert clock.fmt_minutes(45) == "45m" and clock.fmt_minutes(125) == "2h05m"
+
+
+def test_find_deadline_in_sentences():
+    assert clock.find_deadline("Deadline in 45 minutes. Done when the tests pass.", REF) == REF + timedelta(minutes=45)
+    assert clock.find_deadline("ship the report by 5pm, done when tests pass", REF) == REF.replace(hour=17, minute=0)
+    assert clock.find_deadline("we have 2h", REF) == REF + timedelta(hours=2)
+    assert clock.find_deadline("finish by 16:30 please", REF) == REF.replace(hour=16, minute=30)
+    assert clock.find_deadline("add 3 categories", REF) is None
+    assert clock.find_deadline("in 2h", REF) == REF + timedelta(hours=2)

@@ -47,6 +47,25 @@ def parse_deadline(text: str | None, ref: datetime | None = None) -> datetime | 
     return None
 
 
+_DEADLINE_IN_TEXT = re.compile(
+    r"(?:in\s+)?\d+(?:\.\d+)?\s*h(?:ours?|rs?)?(?:\s*\d+\s*m(?:in(?:ute)?s?)?)?\b"
+    r"|(?:in\s+)?\d+\s*m(?:in(?:ute)?s?)?\b"
+    r"|\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b"
+    r"|\b\d{1,2}:\d{2}\b", re.I)
+
+
+def find_deadline(text: str | None, ref: datetime | None = None) -> datetime | None:
+    """A deadline written anywhere in a sentence ('... by 5pm, done when ...')."""
+    if not text:
+        return None
+    if (whole := parse_deadline(text, ref)) is not None:
+        return whole
+    for m in _DEADLINE_IN_TEXT.finditer(text):
+        if (dt := parse_deadline(m.group(0), ref)) is not None:
+            return dt
+    return None
+
+
 def deadline_of(plan: dict | None) -> datetime | None:
     if not plan or not plan.get("deadline"):
         return None

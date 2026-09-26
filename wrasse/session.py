@@ -152,7 +152,7 @@ class Session:
         if stage == "basics":
             if message:
                 basics = planner.extract_basics(message, basics)
-            dl = clock.parse_deadline(basics.get("deadline"))
+            dl = clock.find_deadline(basics.get("deadline"))
             if dl and not basics.get("deadline_iso"):
                 basics["deadline_iso"] = dl.isoformat()
             missing = planner.missing_basics(basics)
