@@ -1,0 +1,52 @@
+name: Wrasse live demo (Atlas + OpenRouter)
+
+# Runs one scripted Wrasse session against the real MongoDB Atlas cluster and real models,
+# and publishes the colour recording to the `demo-recording` branch.
+# Needs repository secrets MONGODB_URI and WRASSE_AUTH_TOKEN (an OpenRouter key).
+on:
+  workflow_dispatch:
+  push:
+    branches: [run-demo]
+
+permissions:
+  contents: write
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      MONGODB_URI: ${{ secrets.MONGODB_URI }}
+      WRASSE_AUTH_TOKEN: ${{ secrets.WRASSE_AUTH_TOKEN }}
+      WRASSE_BASE_URL: https://openrouter.ai/api
+      WRASSE_MODEL: anthropic/claude-sonnet-5
+      WRASSE_TRIAGE_MODEL: anthropic/claude-haiku-4.5
+      TZ: America/New_York
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt && pip install -e .
+      - name: Secrets present
+        run: |
+          [ -n "$MONGODB_URI" ] || { echo "::error::Add the MONGODB_URI repository secret"; exit 1; }
+          [ -n "$WRASSE_AUTH_TOKEN" ] || { echo "::error::Add the WRASSE_AUTH_TOKEN repository secret"; exit 1; }
+      - name: wrasse check (models + Atlas)
+        run: wrasse check
+      - name: Scripted live session
+        run: python eval/demo.py --out demo-recording
+      - name: Publish recording to the demo-recording branch
+        if: always()
+        run: |
+          [ -f demo-recording/demo.html ] || exit 0
+          cp -r demo-recording /tmp/rec
+          git config user.name "wrasse-demo-bot"
+          git config user.email "wrasse-demo-bot@users.noreply.github.com"
+          git checkout --orphan demo-recording
+          git rm -rq --cached .
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp /tmp/rec/* .
+          git add demo.html demo.txt
+          git commit -qm "Demo recording from run ${{ github.run_id }}"
+          git push -f origin demo-recording

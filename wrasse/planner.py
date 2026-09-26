@@ -85,8 +85,8 @@ def extract_basics(message: str, known: dict) -> dict:
     for k in ("goal", "deadline", "done_definition"):
         if got.get(k):
             merged[k] = got[k]
-    # deterministic fallback: the whole message may just be a deadline
-    if not merged.get("deadline") and clock.parse_deadline(message):
+    # deterministic fallback: the model missed the deadline, but the message names one
+    if not clock.find_deadline(merged.get("deadline")) and clock.find_deadline(message):
         merged["deadline"] = message
     return merged
 
@@ -95,7 +95,7 @@ def missing_basics(basics: dict) -> list[str]:
     missing = []
     if not basics.get("goal"):
         missing.append("goal")
-    if not clock.parse_deadline(basics.get("deadline")):
+    if not clock.find_deadline(basics.get("deadline")):
         missing.append("deadline")
     if not basics.get("done_definition"):
         missing.append("done_definition")
