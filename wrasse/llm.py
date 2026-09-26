@@ -48,9 +48,15 @@ class LLMError(RuntimeError):
 
 
 def get_client():
+    """WRASSE_BASE_URL + WRASSE_AUTH_TOKEN (e.g. OpenRouter) take priority and keep Wrasse's gateway
+    separate from any ANTHROPIC_* settings the surrounding tools use; otherwise the SDK's own env vars apply."""
     global _client
     if _client is None:
-        _client = anthropic.Anthropic()
+        token = os.getenv("WRASSE_AUTH_TOKEN")
+        if token:
+            _client = anthropic.Anthropic(base_url=os.getenv("WRASSE_BASE_URL") or None, auth_token=token)
+        else:
+            _client = anthropic.Anthropic()
     return _client
 
 
@@ -76,6 +82,8 @@ def create(*, model: str, system: str, messages: list, max_tokens: int = 16000,
 
 def endpoint() -> str:
     """Where calls go and how they authenticate, for `wrasse check` (never prints secrets)."""
+    if os.getenv("WRASSE_AUTH_TOKEN"):
+        return f"{os.getenv('WRASSE_BASE_URL') or 'https://api.anthropic.com'} · auth: WRASSE_AUTH_TOKEN (bearer)"
     base = os.getenv("ANTHROPIC_BASE_URL") or "https://api.anthropic.com"
     if os.getenv("ANTHROPIC_API_KEY"):
         auth = "ANTHROPIC_API_KEY"

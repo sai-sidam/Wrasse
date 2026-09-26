@@ -164,12 +164,15 @@ Wrasse talks to models through the Anthropic SDK, which can point at OpenRouter'
 endpoint. In `.env` (see `.env.example`, Option B):
 
 ```bash
-ANTHROPIC_BASE_URL=https://openrouter.ai/api
-ANTHROPIC_AUTH_TOKEN=sk-or-...        # your OpenRouter key
-ANTHROPIC_API_KEY=                    # empty, so only the OpenRouter token is sent
+WRASSE_BASE_URL=https://openrouter.ai/api
+WRASSE_AUTH_TOKEN=sk-or-...           # your OpenRouter key
 WRASSE_MODEL=anthropic/...            # OpenRouter's name for Claude Sonnet 5
 WRASSE_TRIAGE_MODEL=anthropic/...     # OpenRouter's name for Claude Haiku 4.5
 ```
+
+When `WRASSE_AUTH_TOKEN` is set, Wrasse sends only that token and ignores `ANTHROPIC_*` variables. That keeps
+its gateway separate from other tools on the same machine (the standard `ANTHROPIC_BASE_URL` /
+`ANTHROPIC_AUTH_TOKEN` variables also work if nothing else uses them).
 
 Copy the two model names from openrouter.ai/models, then run `wrasse check`. It pings both models and the
 database and names whatever is wrong. `WRASSE_MODEL` and `WRASSE_TRIAGE_MODEL` also work with any other

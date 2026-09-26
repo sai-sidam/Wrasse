@@ -65,3 +65,17 @@ def test_check_command(fake_llm, capsys, monkeypatch):
     out = capsys.readouterr().out
     assert out.count("✓") == 2 and "mock" in out
     assert [r["model"] for r in fake_llm.requests] == [llm.SONNET, llm.HAIKU]
+
+
+def test_wrasse_gateway_vars_take_priority(monkeypatch):
+    monkeypatch.setenv("WRASSE_BASE_URL", "https://openrouter.ai/api")
+    monkeypatch.setenv("WRASSE_AUTH_TOKEN", "sk-or-test")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-should-not-be-sent")
+    llm.set_client(None)
+    try:
+        c = llm.get_client()
+        assert str(c.base_url).startswith("https://openrouter.ai/api")
+        assert c.auth_headers == {"Authorization": "Bearer sk-or-test"}      # no Anthropic key leaks
+        assert llm.endpoint() == "https://openrouter.ai/api · auth: WRASSE_AUTH_TOKEN (bearer)"
+    finally:
+        llm.set_client(None)
