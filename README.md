@@ -227,6 +227,11 @@ Every run is saved to the `eval_runs` collection with its full transcript.
 
 > **Pending.** The eval has not yet been run against the live models; this README will be updated with the
 > real table. Run `wrasse eval` to produce it.
+>
+> A run on 2026-09-26 through OpenRouter (`anthropic/claude-sonnet-5` + `anthropic/claude-haiku-4.5`,
+> in-memory database, wrasse mode only) produced no valid numbers. OpenRouter refused every executor call
+> with 402 `billing_error`: the account had no purchased credits, only a spending cap on the key. The eval now
+> counts failed LLM calls and flags any mode that has them as invalid.
 
 | Metric | naive | wrasse |
 |---|---:|---:|

@@ -25,6 +25,8 @@ class Usage:
     input_tokens: int = 0
     output_tokens: int = 0
     calls: int = 0
+    errors: int = 0           # calls that raised (billing, auth, bad model id...)
+    last_error: str = ""
 
     def add(self, usage) -> None:
         self.calls += 1
@@ -36,8 +38,13 @@ class Usage:
     def total(self) -> int:
         return self.input_tokens + self.output_tokens
 
+    def fail(self, e: Exception) -> None:
+        self.errors += 1
+        self.last_error = f"{type(e).__name__}: {e}"
+
     def reset(self) -> None:
-        self.input_tokens = self.output_tokens = self.calls = 0
+        self.input_tokens = self.output_tokens = self.calls = self.errors = 0
+        self.last_error = ""
 
 
 USAGE = Usage()
@@ -75,7 +82,11 @@ def create(*, model: str, system: str, messages: list, max_tokens: int = 16000,
     kwargs: dict[str, Any] = dict(model=model, system=system, messages=messages, max_tokens=max_tokens)
     if tools:
         kwargs["tools"] = tools
-    resp = client.messages.create(**kwargs)
+    try:
+        resp = client.messages.create(**kwargs)
+    except Exception as e:
+        USAGE.fail(e)
+        raise
     USAGE.add(getattr(resp, "usage", None))
     return resp
 
