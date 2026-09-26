@@ -23,6 +23,7 @@ def chat(session: Session) -> None:
     console.print(BANNER)
     console.print(f"[dim]project {session.project} · mode {session.mode} · workspace {session.workspace}[/dim]")
     console.print("[dim]Type a message. Empty line or 'go' continues. 'quit' exits.[/dim]\n")
+    session.intro()
     while True:
         try:
             msg = console.input("[bold green]you ›[/bold green] ")

@@ -92,8 +92,8 @@ def set_state(project: str, **fields: Any) -> dict:
 
 # ---- messages --------------------------------------------------------------
 
-def add_message(project: str, role: str, content: str) -> None:
-    col("messages").insert_one({"project": project, "ts": now(), "role": role, "content": content})
+def add_message(project: str, role: str, content: str, **extra: Any) -> None:
+    col("messages").insert_one({"project": project, "ts": now(), "role": role, "content": content, **extra})
 
 
 def get_messages(project: str, limit: int | None = None) -> list[dict]:

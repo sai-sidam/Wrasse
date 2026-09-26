@@ -70,9 +70,9 @@ def test_session_persists_and_resumes(fake_llm, workspaces):
     ws = create_project("demo")
     assert (ws / "expenses.py").exists() and db.get_state("demo")["phase"] == "gap_check"
     fake_llm.queue = [response(text_block("hi there"))]
-    Session("demo", NullUI()).handle("hello")
+    Session("demo", NullUI(), mode="naive").handle("hello")
     fake_llm.queue = [response(text_block("still here"))]
-    Session("demo", NullUI()).handle("")   # resumed session, empty message == go
+    Session("demo", NullUI(), mode="naive").handle("")   # resumed session, empty message == go
     sent = fake_llm.requests[-1]["messages"]
     assert sent[0] == {"role": "user", "content": "hello"} and sent[1]["content"] == "hi there"
     assert sent[-1]["content"] == "go"
