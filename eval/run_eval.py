@@ -127,6 +127,8 @@ def run_mode(mode: str, script: dict, stamp: str) -> dict:
         "files_changed": sorted(changes),
         "turns": turns,
         "llm_calls": llm.USAGE.calls,
+        "llm_errors": llm.USAGE.errors,
+        "llm_last_error": llm.USAGE.last_error[:300],
         "tokens": llm.USAGE.total,
         "wall_s": round(wall, 1),
         "parked": len(db.get_parked(project)),
@@ -145,6 +147,7 @@ ROWS = [  # (label, key, higher_is_better)
     ("Off-plan files edited", "off_plan_files", False),
     ("Turns", "turns", None),
     ("LLM calls", "llm_calls", None),
+    ("LLM calls failed", "llm_errors", False),
     ("Tokens", "tokens", False),
     ("Wall time (s)", "wall_s", False),
     ("Detours parked", "parked", None),
@@ -180,6 +183,10 @@ def main(argv: list[str] | None = None) -> dict:
     if any(r["llm_calls"] == 0 for r in results.values()):
         console.print("[bold red]⚠ A mode made no successful LLM calls: these numbers are meaningless. "
                       "Check ANTHROPIC_API_KEY.[/bold red]")
+    for m, r in results.items():
+        if r["llm_errors"]:
+            console.print(f"[bold red]⚠ {m}: {r['llm_errors']} LLM call(s) failed, so this mode's numbers "
+                          f"are not valid. Last error: {r['llm_last_error'][:200]}[/bold red]")
     for m, r in results.items():
         console.print(f"[dim]{m}: checks {r['steps_detail']} · curveballs {r['curveballs_detail']} · "
                       f"off-plan {r['off_plan_list']}[/dim]")

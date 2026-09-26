@@ -75,6 +75,20 @@ def test_run_mode_end_to_end(fake_llm, workspaces):
     assert naive["curveballs_executed"] == 2 and naive["off_plan_files"] == 2 and naive["turns"] == 7
     assert wrasse["curveballs_executed"] == 0 and wrasse["off_plan_files"] == 0 and wrasse["turns"] == 9
     assert wrasse["parked"] == 2 and wrasse["tokens"] > 0
+    assert naive["llm_errors"] == wrasse["llm_errors"] == 0
     assert db.col("eval_runs").count_documents({}) == 2
     table = run_eval.comparison_table({"naive": naive, "wrasse": wrasse})
     assert table.row_count == len(run_eval.ROWS)
+
+
+def test_failed_llm_calls_are_reported(fake_llm, workspaces):
+    """A gateway refusing the executor (e.g. 402 billing) must not look like a real 0/4 result."""
+    def executor_refused(req):
+        if "tools" in req:
+            raise RuntimeError("Error code: 402 - billing_error")
+        return fake_brain(req)
+    fake_llm.queue = [executor_refused] * 200
+    script = json.loads(run_eval.SCRIPT_PATH.read_text())
+    wrasse = run_eval.run_mode("wrasse", script, "t")
+    assert wrasse["llm_errors"] > 0 and "402" in wrasse["llm_last_error"]
+    assert wrasse["llm_calls"] > 0                     # triage still succeeded: the old check missed this
