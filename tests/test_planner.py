@@ -118,3 +118,15 @@ def test_mark_step_done_advances_and_stops_turn(fake_llm, workspaces):
     assert len(fake_llm.requests) == 3          # turn stopped after the step advanced
     assert any("Step 1 'Add category field' done · 1/2" in l for l in ui.lines)
     assert "CURRENT STEP S2 (2/2)" in build_context(plan)
+
+
+def test_planner_prompts_are_grounded(fake_llm, tmp_path):
+    fake_llm.queue = [j({"ask": [], "assume": [], "ignore": []}), j(PLAN_DRAFT)]
+    basics = {"goal": "Build a model like opus", "done_definition": "tests pass"}
+    planner.gap_check(basics, tmp_path, 45)
+    gap_prompt = fake_llm.requests[-1]["messages"][0]["content"]
+    assert "isn't achievable here" in gap_prompt and "Never silently swap in a different task" in gap_prompt
+    planner.make_plan(basics, tmp_path, 45)
+    plan_prompt = fake_llm.requests[-1]["messages"][0]["content"]
+    assert "Never add \"fix X\" steps for problems you have not seen" in plan_prompt
+    assert "Do not pad the plan to fill the budget" in plan_prompt

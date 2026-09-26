@@ -112,7 +112,14 @@ TIME LEFT: {clock.fmt_minutes(mins_left)} (plan budget {clock.fmt_minutes(clock.
 WORKSPACE:
 {workspace_snapshot(workspace)}
 
-Do a gap check before any building. Sort every open question into:
+Do a gap check before any building.
+
+First, judge fit. If the goal cannot be done in THIS workspace in the time left (wrong kind of project, or far
+too big), say so plainly: the FIRST ask must state that it isn't achievable here in this time and offer the
+closest achievable version as the default, e.g. "Building X isn't possible in this workspace in 45m. Closest
+achievable: Y. Go with Y?". Never silently swap in a different task.
+
+Then sort every open question into:
 - ask: at most 3 questions whose answer would CHANGE the outcome (what gets built, or whether it fits the time).
   Each needs a suggested default the user can accept with a blank reply, and a short why.
 - assume: sensible defaults you will state and use without asking.
@@ -148,6 +155,9 @@ def make_plan(basics: dict, workspace: Path, mins_left: int, gap: dict | None = 
 - The sum of est_min must be <= {budget}. Default each step to size cupcake.
 - Each step: short title, why (how it serves the goal), size, est_min, files_scope (workspace-relative
   globs the step may edit, including its tests, e.g. ["expenses.py", "tests/test_expenses.py"]).
+- Plan only the work the goal needs. Never add "fix X" steps for problems you have not seen in the
+  WORKSPACE above; if the tests may already pass, plan one short step that runs them and fixes only what fails.
+- Do not pad the plan to fill the budget: finishing early is better. Fewer, smaller steps win.
 - cut: what you deliberately left out (bigger versions, nice-to-haves) and why.
 - assumptions: the defaults you are building on.""")
     draft = llm.json_call(model=llm.SONNET, system=PLANNER_SYSTEM, prompt="\n\n".join(parts), schema=PLAN_SCHEMA)
