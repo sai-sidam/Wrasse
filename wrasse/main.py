@@ -77,7 +77,13 @@ def cmd_rules(args) -> None:
 
 
 def cmd_eval(args) -> None:
-    console.print("[dim]eval arrives in build step 5[/dim]")
+    import importlib.util
+
+    from .session import REPO_ROOT
+    spec = importlib.util.spec_from_file_location("run_eval", REPO_ROOT / "eval" / "run_eval.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    mod.main(["--modes", args.modes])
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -91,7 +97,9 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("rules")
     p.add_argument("project", nargs="?")
     p.set_defaults(fn=cmd_rules)
-    sub.add_parser("eval").set_defaults(fn=cmd_eval)
+    p = sub.add_parser("eval")
+    p.add_argument("--modes", default="naive,wrasse")
+    p.set_defaults(fn=cmd_eval)
     args = parser.parse_args(argv)
     try:
         args.fn(args)

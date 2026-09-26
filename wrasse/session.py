@@ -256,6 +256,7 @@ class Session:
             return result
 
         if kind == "on_plan":
+            self._maybe_switch_step(plan, v.get("related_step_id"))
             return self._work(message, plan)
 
         if kind == "question" and not v["implies_change"]:
@@ -275,6 +276,19 @@ class Session:
         self.say(f"Detour check: '{v['restatement']}' is not part of the current step. Waiting for the user to "
                  f"decide now / later / skip (recommended: {v['recommendation']}). Do not start it.", to_agent=True)
         return result
+
+    def _maybe_switch_step(self, plan: dict, step_id: str | None) -> None:
+        """An on-plan message aimed at another planned step makes that step current."""
+        target = next((s for s in plan["steps"] if s["id"] == step_id and s["status"] == "todo"), None)
+        if target is None or step_id == plan.get("current_step_id"):
+            return
+        for s in plan["steps"]:
+            if s["status"] == "doing":
+                s["status"] = "todo"
+        target["status"], plan["current_step_id"] = "doing", target["id"]
+        db.save_plan(plan)
+        i, _ = clock.current_step(plan)
+        self.ui.back_to_plan(f"Switching to Step {i + 1} '{target['title']}' (already in the plan)")
 
     def _context(self, plan: dict) -> str:
         return build_context(plan, active_rules=db.active_rules(self.project))

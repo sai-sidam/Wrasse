@@ -46,11 +46,12 @@ SYSTEM = """You are Wrasse's triage. A coding agent is executing a plan against 
 latest message and, when it is a detour, price it against the plan.
 
 kind:
-- on_plan: an instruction that advances the CURRENT step (or 'go'/continue).
+- on_plan: an instruction that advances the plan: the CURRENT step (or 'go'/continue), or explicit work on
+  another step that is ALREADY IN THE PLAN (set related_step_id to that step's id).
 - question: the user asks something. A question is NOT an order. implies_change=true only if answering it
   properly would require changing code or the plan (e.g. "could we also add X?", "what if we added Y?").
   Pure knowledge questions ("does json.dump handle datetime?") have implies_change=false.
-- new_request: asks for work that is not the current step (a new feature, polish, refactor, or a later step).
+- new_request: asks for work that is NOT in the plan (a new feature, polish, refactor, infra).
 - plan_change: explicitly changes the plan itself (reorder, drop, replace steps, change deadline/goal).
 - decision: answers a pending detour with now / later / skip.
 
