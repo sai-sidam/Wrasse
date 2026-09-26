@@ -96,6 +96,9 @@ class UI:
     def progress(self, text: str) -> None:
         self.console.print(Text(text, style="bold green"))
 
+    def toast(self, text: str) -> None:
+        self.console.print(Panel(Text(text, style="bold"), border_style="bright_cyan", expand=False))
+
     def back_to_plan(self, text: str) -> None:
         self.console.print(Text(f"↩ {text}", style="bold blue"))
 
@@ -162,6 +165,7 @@ class NullUI(UI):
     def plan_card(self, draft, budget, title="", diff=None): self.lines.append(f"PLAN {draft['steps']}")
     def progress(self, text): self.lines.append("PROGRESS " + text)
     def back_to_plan(self, text): self.lines.append("BACK " + text)
+    def toast(self, text): self.lines.append("TOAST " + text)
     def detour_card(self, v, link=None): self.lines.append(f"DETOUR {v['restatement']} → {v['recommendation']}")
 
     def scope_card(self, path, step):

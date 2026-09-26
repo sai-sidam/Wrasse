@@ -11,7 +11,9 @@ import argparse
 import sys
 
 from rich.console import Console
+from rich.table import Table
 
+from . import clock, db, rules
 from .session import Session, create_project
 from .ui import UI
 
@@ -51,7 +53,27 @@ def cmd_resume(args) -> None:
 
 
 def cmd_rules(args) -> None:
-    console.print("[dim]rule learning arrives in build step 4[/dim]")
+    projects = [args.project] if args.project else db.list_projects()
+    shown = 0
+    for project in projects:
+        found = rules.all_rules(project)
+        if not found:
+            continue
+        shown += 1
+        table = Table(title=f"🧠 Rules learned · {project}", show_lines=True, title_justify="left")
+        for col in ("rule", "conf", "status", "evidence"):
+            table.add_column(col, overflow="fold")
+        events = {e["_id"]: e for e in db.col("events").find({"project": project})}
+        for r in found:
+            ev = [events.get(i) for i in r["evidence_event_ids"]]
+            evidence = "\n".join(
+                f"{clock.fmt_ts(e['ts'])} {(e.get('verdict') or {}).get('restatement') or e['prompt']} → {e['user_decision']}"
+                for e in ev if e)
+            table.add_row(r["text"], str(r["confidence"]),
+                          "[green]active[/green]" if r["active"] else "[dim]retired[/dim]", evidence)
+        console.print(table)
+    if not shown:
+        console.print("[dim]No rules learned yet. Wrasse learns from your now/later/skip and scope y/n decisions.[/dim]")
 
 
 def cmd_eval(args) -> None:

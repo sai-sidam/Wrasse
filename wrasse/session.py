@@ -5,7 +5,7 @@ import os
 import shutil
 from pathlib import Path
 
-from . import clock, db, executor, planner, triage
+from . import clock, db, executor, planner, rules, triage
 from .guard import Guard, in_scope
 from .tools import ToolBox
 from .ui import UI
@@ -46,7 +46,7 @@ def install_plan(project: str, goal: str, done_definition: str, deadline_iso: st
     return plan
 
 
-def build_context(plan: dict, ref=None) -> str:
+def build_context(plan: dict, ref=None, active_rules: list[dict] | None = None) -> str:
     """What the executor is told every turn in wrasse mode: time, goal, step, scope."""
     i, step = clock.current_step(plan)
     lines = [f"CLOCK: {clock.clock_line(plan, ref)}", f"GOAL: {plan['goal']}",
@@ -58,6 +58,8 @@ def build_context(plan: dict, ref=None) -> str:
     rest = [f"{s['id'].upper()} {s['title']} [{s['status']}]" for s in plan["steps"] if s is not step]
     if rest:
         lines.append("OTHER STEPS (do not work on these now): " + "; ".join(rest))
+    if active_rules:
+        lines.append("USER PREFERENCES (learned): " + "; ".join(r["text"] for r in active_rules))
     lines.append("Work only on the current step, at its size. Edit only files in scope. When the step meets its "
                  "goal, run the tests; once they pass, call mark_step_done and stop.")
     return "PLAN CONTEXT\n" + "\n".join(lines)
@@ -76,11 +78,12 @@ class Session:
         self.workspace = workspace_path(project)
         self.box = ToolBox(self.workspace, on_step_done=self._step_done)
         if self.mode == "wrasse":
-            self.box.guard = Guard(project, ask_scope=self.ui.scope_card, on_scope_decision=self._reflect)
+            self.box.guard = Guard(project, ask_scope=self.ui.scope_card, on_scope_decision=self._scope_decided)
         else:
             self.box.on_write = self._log_naive_edit
         self._step_advanced = False
         self._history: list[dict] = []
+        self._reflect_due = False
 
     # ---- helpers ----
     def history(self) -> list[dict]:
@@ -238,12 +241,15 @@ class Session:
             self._remind_pending(pending)
             return None
 
-        event_id = db.log_event(self.project, prompt=message, kind=kind, verdict=v) if message else None
+        _, cur = clock.current_step(plan)
+        event_id = db.log_event(self.project, prompt=message, kind=kind, verdict=v,
+                                mins_left=clock.minutes_left(plan), step_id=cur["id"] if cur else None) \
+            if message else None
 
         if pending:
             # a detour is waiting: answer pure questions, otherwise hold the line until now/later/skip
             if kind == "question" and not v["implies_change"]:
-                result = self._run(message, context=build_context(plan), read_only=True)
+                result = self._run(message, context=self._context(plan), read_only=True)
             else:
                 result = None
             self._remind_pending(pending)
@@ -253,7 +259,7 @@ class Session:
             return self._work(message, plan)
 
         if kind == "question" and not v["implies_change"]:
-            result = self._run(message, context=build_context(plan), read_only=True)
+            result = self._run(message, context=self._context(plan), read_only=True)
             self.ui.back_to_plan(f"Plan unaffected, continuing {self._step_label(plan)}.")
             return result
 
@@ -263,12 +269,15 @@ class Session:
         # new_request, or a question that implies a change: answer the question part, then price the detour
         result = None
         if kind == "question":
-            result = self._run(message, context=build_context(plan), read_only=True)
+            result = self._run(message, context=self._context(plan), read_only=True)
         self.ui.detour_card(v, link=self._link(v, plan))
         db.set_state(self.project, detour_pending={"event_id": event_id, "prompt": message, "verdict": v})
         self.say(f"Detour check: '{v['restatement']}' is not part of the current step. Waiting for the user to "
                  f"decide now / later / skip (recommended: {v['recommendation']}). Do not start it.", to_agent=True)
         return result
+
+    def _context(self, plan: dict) -> str:
+        return build_context(plan, active_rules=db.active_rules(self.project))
 
     def _step_label(self, plan: dict) -> str:
         i, step = clock.current_step(plan)
@@ -342,10 +351,21 @@ class Session:
             return None
         self.ui.back_to_plan(f"Back to plan → Step {i + 1} '{step['title']}'")
         self._history = self.history()
-        return self._run(f"Continue Step {i + 1}: {step['title']}.", context=build_context(plan))
+        return self._run(f"Continue Step {i + 1}: {step['title']}.", context=self._context(plan))
+
+    def _scope_decided(self, event_id=None) -> None:
+        """Scope y/n happens mid-turn; learn once the agent's turn is over."""
+        self._reflect_due = True
 
     def _reflect(self, event_id=None) -> None:
-        """Rule learning hook (build step 4)."""
+        """Rule learning after every detour decision and scope y/n."""
+        self._reflect_due = False
+        for op, text in rules.reflect(self.project):
+            if op == "add":
+                self.ui.toast(f"🧠 Wrasse learned: {text}")
+            else:
+                past = {"strengthen": "strengthened", "weaken": "weakened", "retire": "retired"}[op]
+                self.ui.info(f"🧠 rule {past}: {text}")
 
     # ---- plan_change ----
     def _propose_plan_change(self, instruction: str, plan: dict, event_id) -> None:
@@ -391,7 +411,7 @@ class Session:
                 return None
         if not message or message.lower() in triage.CONTINUE_WORDS:
             message = f"Continue Step {i + 1}: {step['title']}."
-        return self._run(message, context=build_context(plan))
+        return self._run(message, context=self._context(plan))
 
     def _run(self, message: str, context: str, read_only: bool = False) -> executor.ExecResult:
         self._step_advanced = False
@@ -402,6 +422,8 @@ class Session:
             self.ui.warn(f"agent stopped: {result.stop}")
         db.add_message(self.project, "assistant", result.text or f"({result.stop})")
         self._history = self.history()
+        if self._reflect_due:
+            self._reflect()
         return result
 
     def _step_done(self, summary: str) -> str:

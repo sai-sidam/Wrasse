@@ -60,7 +60,8 @@ class Guard:
         db.log_edit(self.project, path, step_id, False, allowed=yes)
         event_id = db.log_event(self.project, prompt=f"write {path}", kind="scope",
                                 verdict={"file": path, "step_id": step_id, "size": step.get("size")},
-                                user_decision="y" if yes else "n", decision_ts=db.now())
+                                user_decision="y" if yes else "n", decision_ts=db.now(),
+                                mins_left=clock.minutes_left(plan), step_id=step_id)
         if yes:
             step.setdefault("files_scope", []).append(path)
             db.save_plan(plan)
