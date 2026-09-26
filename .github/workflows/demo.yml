@@ -16,7 +16,7 @@ permissions:
 jobs:
   demo:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       MONGODB_URI: ${{ secrets.MONGODB_URI }}
       WRASSE_AUTH_TOKEN: ${{ secrets.WRASSE_AUTH_TOKEN }}
@@ -41,7 +41,8 @@ jobs:
           ATLAS_PROJECT_ID: ${{ secrets.ATLAS_PROJECT_ID }}
         run: |
           if [ -z "$ATLAS_CLIENT_ID" ] || [ -z "$ATLAS_CLIENT_SECRET" ] || [ -z "$ATLAS_PROJECT_ID" ]; then
-            echo "No Atlas service account secrets: assuming the cluster's access list already admits this runner."
+            echo "No Atlas service account secrets: printing this runner's IP and waiting for it to be allowed."
+            python eval/wait_for_atlas.py
             exit 0
           fi
           python eval/atlas_allow_ip.py
