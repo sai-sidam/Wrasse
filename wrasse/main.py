@@ -4,16 +4,18 @@
     wrasse resume <project> [--mode wrasse|naive]
     wrasse rules [project]
     wrasse eval
+    wrasse check
 """
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from rich.console import Console
 from rich.table import Table
 
-from . import clock, db, rules
+from . import clock, db, llm, rules
 from .session import Session, create_project
 from .ui import UI
 
@@ -76,6 +78,34 @@ def cmd_rules(args) -> None:
         console.print("[dim]No rules learned yet. Wrasse learns from your now/later/skip and scope y/n decisions.[/dim]")
 
 
+def cmd_check(args) -> None:
+    """Verify the setup: model endpoint, both models, and the database."""
+    table = Table(title="🐟 wrasse check", title_justify="left", show_header=False)
+    table.add_column("item")
+    table.add_column("status", overflow="fold")
+    table.add_row("endpoint", llm.endpoint())
+    ok = True
+    for role, model in (("executor/planner/rules", llm.SONNET), ("triage", llm.HAIKU)):
+        try:
+            table.add_row(f"{role}: {model}", f"[green]✓[/green] replied {llm.ping(model)[:40]!r}")
+        except Exception as e:
+            ok = False
+            table.add_row(f"{role}: {model}", f"[red]✗ {type(e).__name__}: {str(e)[:200]}[/red]")
+    try:
+        database = db.get_db()
+        if os.getenv("WRASSE_DB") == "mock":
+            table.add_row("database", "[yellow]mock (in-memory; nothing is saved)[/yellow]")
+        else:
+            database.client.admin.command("ping")
+            table.add_row("database", f"[green]✓[/green] Atlas reachable, db '{db.DB_NAME}'")
+    except Exception as e:
+        ok = False
+        table.add_row("database", f"[red]✗ {type(e).__name__}: {str(e)[:200]}[/red]")
+    console.print(table)
+    if not ok:
+        sys.exit(1)
+
+
 def cmd_eval(args) -> None:
     import importlib.util
 
@@ -97,6 +127,7 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("rules")
     p.add_argument("project", nargs="?")
     p.set_defaults(fn=cmd_rules)
+    sub.add_parser("check", help="verify models and database").set_defaults(fn=cmd_check)
     p = sub.add_parser("eval")
     p.add_argument("--modes", default="naive,wrasse")
     p.set_defaults(fn=cmd_eval)

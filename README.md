@@ -135,6 +135,7 @@ When Wrasse picks up a pattern in your decisions, you see a toast:
 | `wrasse/main.py` | The `wrasse` CLI |
 
 Models: `claude-sonnet-5` for the executor, planner and rule reflection. `claude-haiku-4-5` for triage, for speed.
+Both can be overridden with `WRASSE_MODEL` and `WRASSE_TRIAGE_MODEL` (for example, to use OpenRouter).
 
 ---
 
@@ -149,12 +150,30 @@ cp .env.example .env        # set MONGODB_URI and ANTHROPIC_API_KEY
 ```
 
 ```bash
+wrasse check                # verify the model endpoint, both models, and Atlas
 wrasse new demo             # copy workspace_template/ into workspaces/demo/, run the gap check, plan, build
 wrasse resume demo          # pick up where you left off (chat history lives in Atlas)
 wrasse new base --mode naive  # the same agent with no Wrasse layers, for comparison
 wrasse rules                # learned rules and the decisions behind them
 wrasse eval                 # Wrasse vs naive on the scripted run
 ```
+
+### Using OpenRouter instead of the Anthropic API
+
+Wrasse talks to models through the Anthropic SDK, which can point at OpenRouter's Anthropic-compatible
+endpoint. In `.env` (see `.env.example`, Option B):
+
+```bash
+ANTHROPIC_BASE_URL=https://openrouter.ai/api
+ANTHROPIC_AUTH_TOKEN=sk-or-...        # your OpenRouter key
+ANTHROPIC_API_KEY=                    # empty, so only the OpenRouter token is sent
+WRASSE_MODEL=anthropic/...            # OpenRouter's name for Claude Sonnet 5
+WRASSE_TRIAGE_MODEL=anthropic/...     # OpenRouter's name for Claude Haiku 4.5
+```
+
+Copy the two model names from openrouter.ai/models, then run `wrasse check`. It pings both models and the
+database and names whatever is wrong. `WRASSE_MODEL` and `WRASSE_TRIAGE_MODEL` also work with any other
+gateway that uses its own model names; left unset, Wrasse uses `claude-sonnet-5` and `claude-haiku-4-5`.
 
 In the chat, an empty line or `go` continues the current step. Answer detours with `now`, `later` or `skip`,
 and scope cards with `y` or `n`. Type `quit` to exit.

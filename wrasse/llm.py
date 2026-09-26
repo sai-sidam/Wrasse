@@ -3,6 +3,7 @@ with schema validation + retry."""
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -12,8 +13,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-SONNET = "claude-sonnet-5"      # executor, planner, rule reflection
-HAIKU = "claude-haiku-4-5"      # triage (speed)
+# Override for gateways with their own model names (e.g. OpenRouter): WRASSE_MODEL / WRASSE_TRIAGE_MODEL.
+SONNET = os.getenv("WRASSE_MODEL") or "claude-sonnet-5"             # executor, planner, rule reflection
+HAIKU = os.getenv("WRASSE_TRIAGE_MODEL") or "claude-haiku-4-5"      # triage (speed)
 
 _client = None
 
@@ -70,6 +72,25 @@ def create(*, model: str, system: str, messages: list, max_tokens: int = 16000,
     resp = client.messages.create(**kwargs)
     USAGE.add(getattr(resp, "usage", None))
     return resp
+
+
+def endpoint() -> str:
+    """Where calls go and how they authenticate, for `wrasse check` (never prints secrets)."""
+    base = os.getenv("ANTHROPIC_BASE_URL") or "https://api.anthropic.com"
+    if os.getenv("ANTHROPIC_API_KEY"):
+        auth = "ANTHROPIC_API_KEY"
+    elif os.getenv("ANTHROPIC_AUTH_TOKEN"):
+        auth = "ANTHROPIC_AUTH_TOKEN (bearer)"
+    else:
+        auth = "none found"
+    return f"{base} · auth: {auth}"
+
+
+def ping(model: str) -> str:
+    """One tiny call; returns the reply text or raises."""
+    resp = create(model=model, system="Reply with exactly: OK", max_tokens=20,
+                  messages=[{"role": "user", "content": "ping"}], timeout=60)
+    return text_of(resp) or f"(empty reply, stop_reason={resp.stop_reason})"
 
 
 def text_of(resp) -> str:

@@ -34,3 +34,34 @@ def test_json_call_gives_up(fake_llm):
     fake_llm.queue = [response(text_block("x"))] * 2
     with pytest.raises(llm.LLMError):
         llm.json_call(model=llm.HAIKU, system="s", prompt="p", schema=SCHEMA, retries=1)
+
+
+def test_models_overridable_by_env(monkeypatch):
+    import importlib
+    monkeypatch.setenv("WRASSE_MODEL", "anthropic/some-sonnet")
+    monkeypatch.setenv("WRASSE_TRIAGE_MODEL", "anthropic/some-haiku")
+    try:
+        mod = importlib.reload(llm)
+        assert (mod.SONNET, mod.HAIKU) == ("anthropic/some-sonnet", "anthropic/some-haiku")
+    finally:
+        monkeypatch.delenv("WRASSE_MODEL")
+        monkeypatch.delenv("WRASSE_TRIAGE_MODEL")
+        importlib.reload(llm)
+
+
+def test_endpoint_never_shows_secrets(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://openrouter.ai/api")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "sk-or-secret")
+    out = llm.endpoint()
+    assert out == "https://openrouter.ai/api · auth: ANTHROPIC_AUTH_TOKEN (bearer)" and "secret" not in out
+
+
+def test_check_command(fake_llm, capsys, monkeypatch):
+    from wrasse.main import main
+    monkeypatch.setenv("WRASSE_DB", "mock")
+    fake_llm.queue = [response(text_block("OK")), response(text_block("OK"))]
+    main(["check"])
+    out = capsys.readouterr().out
+    assert out.count("✓") == 2 and "mock" in out
+    assert [r["model"] for r in fake_llm.requests] == [llm.SONNET, llm.HAIKU]
