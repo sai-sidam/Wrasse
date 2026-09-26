@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from wrasse import clock, db, triage
+from wrasse import clock, db, llm, triage
 from wrasse.guard import Guard, in_scope
 from wrasse.session import Session, create_project, install_plan
 from wrasse.ui import NullUI
@@ -125,7 +125,7 @@ def test_triage_prompt_has_clock_rules_parked(fake_llm, project):
     triage.classify("could we add colors?", db.get_plan("demo"), rules=db.active_rules("demo"),
                     parked=db.get_parked("demo"))
     req = fake_llm.requests[-1]
-    assert req["model"] == "claude-haiku-4-5"
+    assert req["model"] == llm.HAIKU
     body = req["messages"][0]["content"]
     assert "2h00m left" in body and "Parks polish when <2h left" in body and "Dark mode" in body
 

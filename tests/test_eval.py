@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from wrasse import db
+from wrasse import db, llm
 from wrasse.session import REPO_ROOT, TEMPLATE_DIR
 from conftest import response, text_block, tool_block
 
@@ -44,7 +44,7 @@ def test_diff_curveballs_and_off_plan(ws):
 def fake_brain(req):
     """Request-aware fake: triage (Haiku), rules (Sonnet JSON) and the executor (Sonnet + tools)."""
     msgs = req["messages"]
-    if req["model"] == "claude-haiku-4-5":
+    if req["model"] == llm.HAIKU:
         body = msgs[0]["content"].split("USER MESSAGE:")[-1]
         if "json.dump" in body:
             v = {"kind": "question", "implies_change": False, "restatement": "json.dump and datetime"}

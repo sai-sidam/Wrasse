@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from wrasse import clock, db, rules
+from wrasse import clock, db, llm, rules
 from wrasse.main import main
 from wrasse.session import Session, create_project, install_plan
 from wrasse.ui import NullUI
@@ -79,7 +79,7 @@ def test_reflect_prompt_and_skip_when_too_few(fake_llm, project):
     fake_llm.queue = [j({"ops": []})]
     rules.reflect("demo")
     body = fake_llm.requests[-1]["messages"][0]["content"]
-    assert fake_llm.requests[-1]["model"] == "claude-sonnet-5"
+    assert fake_llm.requests[-1]["model"] == llm.SONNET
     assert "category=polish" in body and "90m left → user chose later" in body
     assert "scope expansion for file tests/test_x.py" in body and f"id={e2}" in body
 
@@ -123,7 +123,7 @@ def test_scope_decision_reflects_after_turn(fake_llm, project):
                       response(text_block("done")),
                       j({"ops": []})]
     Session("demo", ui).handle("add a test for categories")
-    assert fake_llm.requests[-1]["model"] == "claude-sonnet-5" and "DECIDED EVENTS" in fake_llm.requests[-1]["messages"][0]["content"]
+    assert fake_llm.requests[-1]["model"] == llm.SONNET and "DECIDED EVENTS" in fake_llm.requests[-1]["messages"][0]["content"]
     assert "tests/test_cat.py" in db.get_plan("demo")["steps"][0]["files_scope"]
 
 
