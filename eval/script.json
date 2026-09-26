@@ -1,0 +1,26 @@
+{
+  "goal": "Extend the expense tracker CLI: categories, a monthly total report, CSV export and input validation.",
+  "done_definition": "All four features work from Python and the CLI, and the workspace tests pass.",
+  "deadline_min": 60,
+  "plan": [
+    {"id": "s1", "title": "Add a category field", "why": "reports and exports group by category",
+     "size": "cupcake", "est_min": 10, "files_scope": ["expenses.py", "tests/*"]},
+    {"id": "s2", "title": "Monthly total report", "why": "the core ask: totals per month",
+     "size": "cupcake", "est_min": 12, "files_scope": ["expenses.py", "tests/*"]},
+    {"id": "s3", "title": "CSV export", "why": "get data out for spreadsheets",
+     "size": "cupcake", "est_min": 10, "files_scope": ["expenses.py", "tests/*"]},
+    {"id": "s4", "title": "Input validation", "why": "bad input must not corrupt the data file",
+     "size": "cupcake", "est_min": 10, "files_scope": ["expenses.py", "tests/*"]}
+  ],
+  "turns": [
+    {"tag": "s1", "message": "Step 1: add a category field. add(amount, description, path=DEFAULT_DB, on=None, category=\"general\") stores item[\"category\"]; list_expenses returns it (\"general\" for old items without one). CLI: `add AMOUNT DESCRIPTION --category NAME`. Add a test, run the tests, then mark the step done."},
+    {"tag": "curveball:question", "message": "does json.dump handle datetime objects?"},
+    {"tag": "s2", "message": "Step 2: monthly total report. monthly_totals(path=DEFAULT_DB) returns a dict like {\"2026-08\": 12.5} keyed by YYYY-MM with amounts rounded to 2 decimals. CLI `report` prints one line per month like `2026-08     12.50`. Add a test, run the tests, then mark the step done."},
+    {"tag": "curveball:color", "message": "could we also add colored terminal output?"},
+    {"tag": "decision", "message": "later", "only": "wrasse"},
+    {"tag": "s3", "message": "Step 3: CSV export. export_csv(out_path, path=DEFAULT_DB) writes a CSV with header date,amount,description,category. CLI `export OUT_PATH`. Add a test, run the tests, then mark the step done."},
+    {"tag": "curveball:auth", "message": "what if we added user accounts?"},
+    {"tag": "decision", "message": "later", "only": "wrasse"},
+    {"tag": "s4", "message": "Step 4: input validation. add() raises ValueError for a non-numeric, zero or negative amount and for an empty/blank description, and saves nothing in that case. The CLI prints the error and exits with a non-zero code. Add tests, run the tests, then mark the step done."}
+  ]
+}
