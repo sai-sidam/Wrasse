@@ -1,6 +1,11 @@
 {
   "framework": null,
-  "installCommand": "",
   "buildCommand": "",
-  "outputDirectory": "site"
+  "outputDirectory": "site",
+  "functions": {
+    "api/chat.py": {
+      "maxDuration": 60,
+      "includeFiles": "{wrasse/**,workspace_template/**}"
+    }
+  }
 }

@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wrasse · an agent harness that holds the plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0b1016;--panel:#111821;--line:#1f2a36;--text:#d7e0ea;--dim:#7d8b99;--cyan:#4fd1e8;--green:#3ddc84;
+        --yellow:#f5c451;--magenta:#e07be0;--red:#ff6b6b;--blue:#6ea8ff;--leaf:#00ed64}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif}
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 28px;border-bottom:1px solid var(--line)}
+  .brand{font-weight:800;font-size:22px}.brand span{color:var(--cyan)}
+  .tag{color:var(--dim);font-size:14px}
+  button{font:600 14px Inter;background:var(--cyan);color:#041018;border:0;border-radius:8px;padding:10px 18px;cursor:pointer}
+  button.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+  main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;padding:20px 28px;max-width:1400px;margin:0 auto}
+  @media(max-width:1000px){main{grid-template-columns:1fr}}
+  .term{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .bar{display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);color:var(--dim);font:12px 'JetBrains Mono'}
+  .dot{width:11px;height:11px;border-radius:50%}
+  #screen{height:640px;overflow-y:auto;padding:16px 18px;font:13.5px/1.55 'JetBrains Mono',monospace;scroll-behavior:smooth}
+  .line{white-space:pre-wrap;margin:2px 0;animation:in .25s ease}
+  @keyframes in{from{opacity:0;transform:translateY(4px)}to{opacity:1}}
+  .you{color:var(--green);font-weight:700}.dim{color:var(--dim)}
+  .card{border:1px solid;border-radius:8px;padding:10px 14px;margin:10px 0;animation:in .3s ease}
+  .card h4{margin:0 0 6px;font:700 13px 'JetBrains Mono'}
+  .gap{border-color:var(--yellow)}.gap h4{color:var(--yellow)}
+  .plan{border-color:var(--green)}.plan h4{color:var(--green)}
+  .detour{border-color:var(--magenta)}.detour h4{color:var(--magenta)}
+  .agent{border-color:var(--cyan)}.agent h4{color:var(--cyan)}
+  .rail{border-color:var(--blue)}
+  .toast{border-color:var(--cyan);display:inline-block;font-weight:700;box-shadow:0 0 24px #4fd1e840}
+  .rec{background:var(--text);color:#0b1016;padding:0 6px;font-weight:700}
+  .ok{color:var(--green)}.bad{color:var(--red)}.y{color:var(--yellow)}.m{color:var(--magenta)}.c{color:var(--cyan)}.b{color:var(--blue)}
+  table{border-collapse:collapse;width:100%}td,th{padding:3px 8px;text-align:left}th{color:var(--dim);font-weight:600}
+  aside{display:flex;flex-direction:column;gap:16px}
+  .side{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .side h3{margin:0 0 10px;font-size:14px;letter-spacing:.04em;text-transform:uppercase;color:var(--dim)}
+  .mongo h3{color:var(--leaf)}
+  .coll{display:flex;justify-content:space-between;font:13px 'JetBrains Mono';padding:5px 0;border-bottom:1px dashed var(--line)}
+  .coll b{color:var(--leaf);transition:all .3s}
+  .flash{animation:fl .6s}@keyframes fl{0%{color:#fff;text-shadow:0 0 10px var(--leaf)}}
+  .rule{font:13px 'JetBrains Mono';color:var(--cyan)}
+  .res td:nth-child(2),.res td:nth-child(3){text-align:right;font-family:'JetBrains Mono'}
+  .res .win{color:var(--green);font-weight:700}
+  .res{font-size:13px}
+  footer{color:var(--dim);font-size:12px;text-align:center;padding:10px 28px 24px}
+  a{color:var(--cyan)}
+</style>
+</head>
+<body>
+<header>
+  <div><div class="brand">🐟 <span>WRASSE</span></div><div class="tag">Your AI is the shark. Wrasse keeps it clean. An agent harness that holds the plan.</div></div>
+  <div style="display:flex;gap:10px"><button id="play">▶ Play demo</button><button class="ghost" id="skip">Show all</button></div>
+</header>
+<main>
+  <section class="term">
+    <div class="bar"><span class="dot" style="background:#ff5f56"></span><span class="dot" style="background:#ffbd2e"></span><span class="dot" style="background:#27c93f"></span>&nbsp; wrasse new demo · mode wrasse · executor claude-sonnet-5 · triage claude-haiku-4.5</div>
+    <div id="screen"><div class="line dim">Press ▶ Play demo.</div></div>
+  </section>
+  <aside>
+    <div class="side mongo"><h3>🍃 MongoDB Atlas · db "wrasse"</h3><div id="colls"></div>
+      <div class="dim" style="font-size:12px;margin-top:8px">Every plan, decision, parked idea, edit and learned rule is a document. Sessions resume from Atlas.</div></div>
+    <div class="side"><h3>🧠 Learned rules</h3><div id="rules" class="dim" style="font-size:13px">none yet: Wrasse learns from your decisions</div></div>
+    <div class="side"><h3>Eval · same model, same script</h3>
+      <table class="res">
+        <tr><th></th><th>naive</th><th>wrasse</th></tr>
+        <tr><td>Steps completed</td><td>4/4</td><td>4/4</td></tr>
+        <tr><td>Curveballs built unasked</td><td>1</td><td class="win">0</td></tr>
+        <tr><td>Off-plan files edited</td><td>1</td><td class="win">0</td></tr>
+        <tr><td>Tokens</td><td>297,494</td><td class="win">229,595</td></tr>
+        <tr><td>Detours parked</td><td>0</td><td>2</td></tr>
+      </table>
+      <div class="dim" style="font-size:11px;margin-top:6px">claude-sonnet-5 + claude-haiku-4.5 via OpenRouter, 9/26. Full table in the repo README.</div></div>
+  </aside>
+</main>
+<footer>The terminal pane replays a Wrasse session in its real UI format; eval numbers are from real runs. Built 9/26 at the MongoDB Harness Engineering &amp; Model Wrangling Hackathon · Statement One: Recursive Harnessing ·
+  <a href="https://github.com/sai-sidam/Wrasse">github.com/sai-sidam/Wrasse</a></footer>
+
+<script>
+const S = document.getElementById('screen');
+const COLLS = ['plans','state','messages','events','parked','edits','rules'];
+const counts = Object.fromEntries(COLLS.map(c=>[c,0]));
+function renderColls(flash){document.getElementById('colls').innerHTML = COLLS.map(c=>
+  `<div class="coll"><span>${c}</span><b class="${flash&&flash.includes(c)?'flash':''}">${counts[c]}</b></div>`).join('');}
+renderColls();
+function db(delta){const f=[];for(const [k,v] of Object.entries(delta)){counts[k]+=v;f.push(k)}renderColls(f);}
+function add(html, cls='line'){const d=document.createElement('div');d.className=cls;d.innerHTML=html;S.appendChild(d);S.scrollTop=S.scrollHeight;}
+const you = t => add(`<span class="you">you ›</span> ${t}`);
+const rail = (s,clock) => add(`<div>${s}</div><div class="dim">${clock}</div>`,'card rail');
+
+const steps = [
+ [0,   ()=>add('<span class="c">🐟 What are we building, by when, and how will we know it\'s done?</span>')],
+ [1500,()=>{you('Add a category field and a monthly total report to the expense tracker, CSV export if there is time. Deadline in 45 minutes. Done when the tests pass.');db({messages:1,state:1})}],
+ [2600,()=>{add(`<h4>🐟 WRASSE: GAP CHECK</h4><b>Goal:</b> category field + monthly report (+ CSV if time)
+<b>Done when:</b> tests pass     <span class="dim">Time: 45m left → plan budget 36m (20% buffer)</span>
+<span class="y">ASK (these change the outcome)</span>
+  1. Should old expenses without a category default to "general"?  <span class="dim">[default: yes]</span>
+<span class="c">ASSUME</span>  • keep JSON storage   • months keyed YYYY-MM
+<span class="dim">IGNORE  • charts, auth, a web UI</span>
+<i>Answer in one line. Blank = accept defaults.</i>`,'card gap');db({messages:1})}],
+ [2600,()=>you('<span class="dim">(enter)</span>')],
+ [1200,()=>{add(`<h4>🐟 WRASSE: PLAN</h4><table>
+<tr><th>#</th><th>step</th><th>size</th><th>est</th><th>scope</th></tr>
+<tr><td>S1</td><td>Add a category field</td><td>🧁 cupcake</td><td>10m</td><td class="dim">expenses.py, tests/*</td></tr>
+<tr><td>S2</td><td>Monthly total report</td><td>🧁 cupcake</td><td>14m</td><td class="dim">expenses.py, tests/*</td></tr>
+<tr><td>S3</td><td>CSV export</td><td>🧁 cupcake</td><td>10m</td><td class="dim">expenses.py, tests/*</td></tr></table>
+<span class="ok">Total 34m of 36m budget</span>
+<span class="bad">✂ per-category charts:</span> <span class="dim">won't fit in 45 minutes</span>
+<i>Confirm: y · or type an edit instruction</i>`,'card plan');db({messages:1})}],
+ [2800,()=>{you('y');db({plans:1,state:0,messages:1})}],
+ [900, ()=>rail('<span class="y">◉ S1 Add a category field</span>  <span class="dim">›</span>  ○ S2 Monthly total report  <span class="dim">›</span>  ○ S3 CSV export',
+                '⏱ 15:12 · deadline 15:57 · 45m left · Step 1/3 \'Add a category field\' est 10m · plan v1 · parked 0')],
+ [1300,()=>{add(`<h4>agent</h4><span class="ok">✓</span> read_file expenses.py
+<span class="ok">✓</span> write_file expenses.py <span class="dim">→ category param, default "general"</span>
+<span class="ok">✓</span> write_file tests/test_expenses.py
+<span class="ok">✓</span> run_tests <span class="dim">→ exit code 0 (PASS) 6 passed</span>
+<span class="ok">✓</span> mark_step_done`,'card agent');db({edits:2,messages:1})}],
+ [1800,()=>{add('<span class="ok"><b>✅ Step 1 \'Add a category field\' done · 1/3 · 38m left</b></span>');db({plans:0})}],
+ [1500,()=>{you('could we also add colored terminal output?');db({messages:1,events:1})}],
+ [1500,()=>{add(`<h4>🐟 WRASSE: DETOUR CHECK</h4><b>Asked:</b> Colored terminal output
+<b>Related to goal:</b> <span class="bad">No</span>, cosmetic; the goal is categories and a monthly report
+<b>Impact:</b> pushes S2, S3 ~15m · touches ~2 files · risk: low
+
+<b>Now:  </b> <span class="ok">+ nicer demo</span>   <span class="bad">− S2 slips, CSV likely cut</span>
+<b>Later:</b> <span class="ok">+ plan stays on time</span>   <span class="bad">− plain output today</span>
+<b>Skip: </b> <span class="ok">+ zero cost</span>   <span class="bad">− never colored</span>
+
+<b>Recommendation:</b> <span class="rec">LATER</span>, 38m left for 2 steps; polish can wait
+<i>Reply: now / later / skip</i>`,'card detour')}],
+ [4200,()=>{you('later');db({parked:1,messages:1})}],
+ [800, ()=>add('<span class="ok"><b>⏸ Parked: Colored terminal output</b></span>')],
+ [700, ()=>add('<span class="b"><b>↩ Back to plan → Step 2 \'Monthly total report\'</b></span>')],
+ [1400,()=>{you('does json.dump handle datetime objects?');db({messages:1,events:1})}],
+ [1400,()=>{add(`<h4>agent · read-only</h4>No. json.dump raises TypeError on datetime. This project already stores dates as
+ISO strings (date.isoformat()), so nothing needs to change.`,'card agent');db({messages:1})}],
+ [1500,()=>add('<span class="b"><b>↩ Plan unaffected, continuing Step 2 \'Monthly total report\'.</b></span>')],
+ [1500,()=>{you('what if we added user accounts?');db({messages:1,events:1})}],
+ [1400,()=>{add(`<h4>🐟 WRASSE: DETOUR CHECK</h4><b>Asked:</b> User accounts (login, per-user data)
+<b>Related to goal:</b> <span class="bad">No</span>, a new feature outside the plan
+<b>Impact:</b> pushes S2, S3 ~60m · touches ~5 files · risk: high
+
+<b>Now:  </b> <span class="ok">+ multi-user</span>   <span class="bad">− blows the 45m deadline</span>
+<b>Later:</b> <span class="ok">+ keeps S2/S3 on time</span>   <span class="bad">− single user today</span>
+<b>Skip: </b> <span class="ok">+ zero cost</span>   <span class="bad">− never</span>
+
+<b>Recommendation:</b> <span class="rec">LATER</span>, 36m left; this is bigger than the whole plan
+<i>Reply: now / later / skip</i>`,'card detour')}],
+ [3600,()=>{you('later');db({parked:1,messages:1})}],
+ [800, ()=>add('<span class="ok"><b>⏸ Parked: User accounts</b></span>')],
+ [900, ()=>{add('🧠 Wrasse learned: Parks new features and polish when under 1h is left','card toast');db({rules:1});
+            document.getElementById('rules').innerHTML='<div class="rule">Parks new features and polish when under 1h is left</div><div class="dim" style="font-size:12px">confidence 2 · evidence: 2 "later" decisions</div>'}],
+ [1500,()=>add('<span class="b"><b>↩ Back to plan → Step 2 \'Monthly total report\'</b></span>')],
+ [900, ()=>rail('<span class="ok">✔ S1 Add a category field</span>  <span class="dim">›</span>  <span class="y">◉ S2 Monthly total report</span>  <span class="dim">›</span>  ○ S3 CSV export',
+                '⏱ 15:21 · deadline 15:57 · 36m left · Step 2/3 \'Monthly total report\' est 14m · plan v1 · parked 2')],
+ [1300,()=>{add(`<h4>agent</h4><span class="ok">✓</span> write_file expenses.py <span class="dim">→ monthly_totals(), CLI "report"</span>
+<span class="bad">✗</span> write_file colors.py <span class="dim">→ REFUSED: outside Step S2's scope (cupcake). The user said no.</span>
+<span class="ok">✓</span> run_tests <span class="dim">→ exit code 0 (PASS) 8 passed</span>
+<span class="ok">✓</span> mark_step_done`,'card agent');db({edits:2,messages:1,events:1})}],
+ [1800,()=>add('<span class="ok"><b>✅ Step 2 \'Monthly total report\' done · 2/3 · 29m left</b></span>')],
+];
+let timer=null;
+function reset(){clearTimeout(timer);S.innerHTML='';COLLS.forEach(c=>counts[c]=0);renderColls();
+  document.getElementById('rules').innerHTML='none yet: Wrasse learns from your decisions';}
+function play(i=0){if(i>=steps.length)return;timer=setTimeout(()=>{steps[i][1]();play(i+1)},steps[i][0]);}
+document.getElementById('play').onclick=()=>{reset();play();document.getElementById('play').textContent='↻ Replay';};
+document.getElementById('skip').onclick=()=>{reset();steps.forEach(s=>s[1]());};
+</script>
+</body>
+</html>
