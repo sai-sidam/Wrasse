@@ -171,6 +171,32 @@ def test_detour_later_parks_and_resumes(fake_llm, project):
     assert "parked for later; do not work on it now" in sent[-2]["content"]
 
 
+def test_detour_right_after_step_done_waits_for_the_user(fake_llm, project):
+    """A step reached by finishing the last one is not started from its title after a detour decision."""
+    ui = NullUI()
+    fake_llm.queue = [j({"kind": "on_plan", "implies_change": False, "restatement": "do s1"}),
+                      response(tool_block("run_tests", {})),
+                      response(tool_block("mark_step_done", {"summary": "s1 done"}, id_="t2")), response(text_block("done"))]
+    session(ui).handle("add the category field")
+    assert db.get_plan("demo")["current_step_id"] == "s2"
+    fake_llm.queue = [j(DETOUR)]
+    session(ui).handle("could we also add colored terminal output?")
+    n = len(fake_llm.requests)
+    session(ui).handle("later")
+    assert len(fake_llm.requests) == n            # decision parsed locally; the executor does not start s2
+    assert any("BACK Back to plan → Step 2 'Monthly total report'" in l for l in ui.lines)
+
+    # once the user asks for s2 it runs, and a later detour resumes it as usual
+    fake_llm.queue = [j({"kind": "on_plan", "implies_change": False, "restatement": "do s2"}),
+                      response(text_block("working on s2"))]
+    session(ui).handle("build the monthly report")
+    assert "fresh" not in db.get_plan("demo")["steps"][1]
+    fake_llm.queue = [j(DETOUR), response(text_block("resuming s2"))]
+    session(ui).handle("colors?")
+    session(ui).handle("later")
+    assert fake_llm.requests[-1]["messages"][-1]["content"] == "Continue Step 2: Monthly total report."
+
+
 def test_detour_now_inserts_step(fake_llm, project):
     fake_llm.queue = [j(DETOUR)]
     session().handle("add colors please")

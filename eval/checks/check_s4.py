@@ -23,6 +23,9 @@ def test_nothing_saved_on_error(tmp_path):
 
 
 def test_cli_rejects_bad_amount(tmp_path):
-    with pytest.raises(SystemExit) as e:
-        expenses.main(["--file", str(tmp_path / "e.json"), "add", "abc", "x"])
-    assert e.value.code not in (0, None)
+    # `sys.exit(main())` is the entry point, so a non-zero return exits non-zero just like SystemExit
+    try:
+        code = expenses.main(["--file", str(tmp_path / "e.json"), "add", "abc", "x"])
+    except SystemExit as e:
+        code = e.code
+    assert code not in (0, None)
