@@ -50,6 +50,8 @@ def test_models_overridable_by_env(monkeypatch):
 
 
 def test_endpoint_never_shows_secrets(monkeypatch):
+    monkeypatch.delenv("WRASSE_AUTH_TOKEN", raising=False)     # the environment may set Wrasse's own gateway
+    monkeypatch.delenv("WRASSE_BASE_URL", raising=False)
     monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://openrouter.ai/api")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
     monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "sk-or-secret")
