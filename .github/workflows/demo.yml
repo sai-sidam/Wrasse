@@ -3,6 +3,8 @@ name: Wrasse live demo (Atlas + OpenRouter)
 # Runs one scripted Wrasse session against the real MongoDB Atlas cluster and real models,
 # and publishes the colour recording to the `demo-recording` branch.
 # Needs repository secrets MONGODB_URI and WRASSE_AUTH_TOKEN (an OpenRouter key).
+# If the Atlas org forbids 0.0.0.0/0, also set ATLAS_CLIENT_ID, ATLAS_CLIENT_SECRET (a service account
+# with Project Owner) and ATLAS_PROJECT_ID: the run then allow-lists only this runner's IP, temporarily.
 on:
   workflow_dispatch:
   push:
@@ -14,7 +16,7 @@ permissions:
 jobs:
   demo:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       MONGODB_URI: ${{ secrets.MONGODB_URI }}
       WRASSE_AUTH_TOKEN: ${{ secrets.WRASSE_AUTH_TOKEN }}
@@ -32,6 +34,18 @@ jobs:
         run: |
           [ -n "$MONGODB_URI" ] || { echo "::error::Add the MONGODB_URI repository secret"; exit 1; }
           [ -n "$WRASSE_AUTH_TOKEN" ] || { echo "::error::Add the WRASSE_AUTH_TOKEN repository secret"; exit 1; }
+      - name: Allow this runner's IP in Atlas (temporary)
+        env:
+          ATLAS_CLIENT_ID: ${{ secrets.ATLAS_CLIENT_ID }}
+          ATLAS_CLIENT_SECRET: ${{ secrets.ATLAS_CLIENT_SECRET }}
+          ATLAS_PROJECT_ID: ${{ secrets.ATLAS_PROJECT_ID }}
+        run: |
+          if [ -z "$ATLAS_CLIENT_ID" ] || [ -z "$ATLAS_CLIENT_SECRET" ] || [ -z "$ATLAS_PROJECT_ID" ]; then
+            echo "No Atlas service account secrets: printing this runner's IP and waiting for it to be allowed."
+            python eval/wait_for_atlas.py
+            exit 0
+          fi
+          python eval/atlas_allow_ip.py
       - name: wrasse check (models + Atlas)
         run: wrasse check
       - name: Scripted live session
