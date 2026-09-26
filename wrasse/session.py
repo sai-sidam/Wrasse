@@ -364,6 +364,9 @@ class Session:
             self.ui.back_to_plan("Back to plan → all steps done.")
             return None
         self.ui.back_to_plan(f"Back to plan → Step {i + 1} '{step['title']}'")
+        if step.get("fresh"):
+            # nothing done on this step yet: wait for the user instead of starting it from its title alone
+            return None
         self._history = self.history()
         return self._run(f"Continue Step {i + 1}: {step['title']}.", context=self._context(plan))
 
@@ -423,6 +426,8 @@ class Session:
             self.ui.progress("All steps done. 🎉")
             if not message or message.lower() in triage.CONTINUE_WORDS:
                 return None
+        if step.pop("fresh", None):
+            db.save_plan(plan)
         if not message or message.lower() in triage.CONTINUE_WORDS:
             message = f"Continue Step {i + 1}: {step['title']}."
         return self._run(message, context=self._context(plan))
@@ -446,6 +451,8 @@ class Session:
             return "no current step to mark done"
         i, step = clock.current_step(plan)
         nxt = planner.advance(plan)
+        if nxt:
+            nxt["fresh"] = True     # reached by finishing the last step; no work on it yet
         db.save_plan(plan)
         self._step_advanced = True
         done = sum(s["status"] == "done" for s in plan["steps"])

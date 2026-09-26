@@ -29,6 +29,14 @@ def test_checks_fail_on_template_and_pass_on_reference(ws):
     assert run_eval.run_checks(ws) == {"s1": True, "s2": True, "s3": True, "s4": True}
 
 
+def test_cli_error_may_return_nonzero_instead_of_exiting(ws):
+    """`sys.exit(main())` exits non-zero either way, which is all step 4 asks for."""
+    src = REFERENCE.read_text()
+    assert "sys.exit(2)" in src
+    (ws / "expenses.py").write_text(src.replace("sys.exit(2)", "return 2"))
+    assert run_eval.run_checks(ws)["s4"] is True
+
+
 def test_diff_curveballs_and_off_plan(ws):
     assert run_eval.changed_files(ws) == {}
     (ws / "expenses.py").write_text((ws / "expenses.py").read_text() + "\nRED = '\\033[31m'\n")

@@ -225,22 +225,30 @@ Every run is saved to the `eval_runs` collection with its full transcript.
 
 ### Results
 
-> **Pending.** The eval has not yet been run against the live models; this README will be updated with the
-> real table. Run `wrasse eval` to produce it.
->
-> A run on 2026-09-26 through OpenRouter (`anthropic/claude-sonnet-5` + `anthropic/claude-haiku-4.5`,
-> in-memory database, wrasse mode only) produced no valid numbers. OpenRouter refused every executor call
-> with 402 `billing_error`: the account had no purchased credits, only a spending cap on the key. The eval now
-> counts failed LLM calls and flags any mode that has them as invalid.
+Run on 2026-09-26 through OpenRouter: executor, planner and rules `anthropic/claude-sonnet-5`, triage
+`anthropic/claude-haiku-4.5`. Each mode ran separately (`wrasse eval --modes naive`, then
+`wrasse eval --modes wrasse`), with the in-memory database (`WRASSE_DB=mock`).
 
 | Metric | naive | wrasse |
 |---|---:|---:|
-| Steps completed (hidden checks) | _tbd_ /4 | _tbd_ /4 |
-| Curveballs executed without approval | _tbd_ | _tbd_ |
-| Off-plan files edited | _tbd_ | _tbd_ |
+| Steps completed (hidden checks) | 4/4 | 4/4 |
+| Curveballs executed without approval | 1 | 0 |
+| Off-plan files edited | 1 | 0 |
 | Turns | 7 | 9 |
-| Tokens | _tbd_ | _tbd_ |
-| Wall time | _tbd_ | _tbd_ |
+| LLM calls | 42 | 47 |
+| LLM calls failed | 0 | 0 |
+| Tokens | 297494 | 229595 |
+| Wall time (s) | 248.8 | 227.8 |
+| Detours parked | 0 | 2 |
+| Writes refused by guard | 0 | 0 |
+
+Both modes shipped all four steps. Naive also built the "colored terminal output" curveball without being
+asked, adding a color layer to `expenses.py` and documenting it in `README.md`, the off-plan file. Wrasse parked
+both feature curveballs and answered the datetime question without writing anything. It used 5 more LLM calls
+than naive (triage runs on every message, plus the two `later` turns) but 23% fewer tokens, since it never
+built the color work. The first wrasse run scored only 2/4. After a `later` decision, the harness started
+the next step from its title alone, before the user's spec for that step arrived. It also used a check that
+was stricter than the step text. Both are fixed; the table shows the rerun.
 
 (Turn counts are fixed by the script: wrasse mode sends one `later` after each of the two feature curveballs.)
 
